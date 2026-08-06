@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from agents.base import BaseNegotiator, ProposalResult
+from core.prompts import CHINA_PROPOSE_PROMPT, CHINA_RESPOND_PROMPT
+from models.negotiator import CHINA_PERSONA, NegotiatorModel
+
+if TYPE_CHECKING:
+    from models.issue import TradeIssueModel
+    from services.ollama import OllamaService
+
+
+@dataclass(frozen=True, slots=True)
+class ChinaNegotiatorConfig:
+    temperature: float = 0.1
+    top_p: float = 0.9
+    max_tokens: int = 150
+
+
+class ChinaNegotiator(BaseNegotiator):
+    def __init__(
+        self,
+        ollama_service: OllamaService,
+        config: ChinaNegotiatorConfig | None = None,
+    ):
+        cfg = config or ChinaNegotiatorConfig()
+        system_prompt = self._build_system_prompt_static()
+        model = NegotiatorModel(
+            persona=CHINA_PERSONA,
+            system_prompt=system_prompt,
+            temperature=cfg.temperature,
+            top_p=cfg.top_p,
+            max_tokens=cfg.max_tokens,
+        )
+        super().__init__(model, ollama_service)
+
+    @staticmethod
+    def _build_system_prompt_static() -> str:
+        p = CHINA_PERSONA
+        return (
+            f"You are {p.role}. "
+            f"Your priorities: {', '.join(p.priorities)}. "
+            f"Your red lines: {', '.join(p.red_lines)}. "
+            f"Your strategy: {p.strategy}. "
+            f"Flexibility: {p.flexibility:.0%}. "
+            "Rules: Never hallucinate. Never change persona. Never produce markdown. "
+            "Never produce explanations. Never output JSON unless requested. "
+            "Never repeat previous responses. Keep answers below two sentences. "
+            "Be direct and concise."
+        )
+
+    async def propose(self, issue: TradeIssueModel, round_num: int) -> ProposalResult:
+        prompt = CHINA_PROPOSE_PROMPT.format(
+            issue_context=issue.to_prompt_context(),
+            round_num=round_num,
+            history=self._format_history(),
+            priorities=", ".join(self._model.persona.priorities),
+            red_lines=", ".join(self._model.persona.red_lines),
+            strategy=self._model.persona.strategy,
+        )
+        start = time.perf_counter()
+        raw, tokens = await self._ollama.generate(
+            prompt=prompt,
+            system=self._model.system_prompt,
+            temperature=self._model.temperature,
+            top_p=self._model.top_p,
+            max_tokens=self._model.max_tokens,
+        )
+        latency = int((time.perf_counter() - start) * 1000)
+        text = self._parse_response(raw)
+        return ProposalResult(text=text, tokens=tokens, latency_ms=latency)
+
+    async def respond(
+        self, issue: TradeIssueModel, opponent_proposal: str, round_num: int
+    ) -> ProposalResult:
+        prompt = CHINA_RESPOND_PROMPT.format(
+            issue_context=issue.to_prompt_context(),
+            round_num=round_num,
+            history=self._format_history(),
+            opponent_proposal=opponent_proposal,
+            priorities=", ".join(self._model.persona.priorities),
+            red_lines=", ".join(self._model.persona.red_lines),
+            strategy=self._model.persona.strategy,
+        )
+        start = time.perf_counter()
+        raw, tokens = await self._ollama.generate(
+            prompt=prompt,
+            system=self._model.system_prompt,
+            temperature=self._model.temperature,
+            top_p=self._model.top_p,
+            max_tokens=self._model.max_tokens,
+        )
+        latency = int((time.perf_counter() - start) * 1000)
+        text = self._parse_response(raw)
+        return ProposalResult(text=text, tokens=tokens, latency_ms=latency)
+
+    def _format_history(self) -> str:
+        if not self._history:
+            return "No previous rounds."
+        return "\n".join(
+            f"Round {h.round}: USA: {h.usa_proposal} | China: {h.china_response}"
+            for h in self._history
+        )
