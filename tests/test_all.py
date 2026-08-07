@@ -29,11 +29,7 @@ from core.scoring import ScoringEngine
 from core.state import STATE_MANAGER
 from models.history import HistoryRoundModel
 from models.issue import TradeIssueModel
-from models.negotiator import (
-    CHINA_PERSONA,
-    USA_PERSONA,
-    NegotiatorModel,
-)
+from models.negotiator import CHINA_PERSONA, USA_PERSONA, NegotiatorModel
 from schemas.negotiation import (
     Country,
     HistoryRound,

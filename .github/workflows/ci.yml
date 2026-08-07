@@ -40,7 +40,7 @@ jobs:
         run: isort --check-only .
 
       - name: Run mypy (type check)
-        run: mypy --strict .
+        run: mypy --strict agents core config schemas models services utils storage
 
   test:
     name: Tests

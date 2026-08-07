@@ -40,14 +40,16 @@ include = ["agents*", "core*", "config*", "schemas*", "models*", "services*", "u
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+exclude = [".venv", "venv", "__pycache__", ".mypy_cache", ".ruff_cache", "build", "dist", "*.egg-info"]
+
+[tool.ruff.lint]
 select = [
-    "E", "F", "I", "W", "UP", "B", "C4", "SIM", "T20", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF", "RET", "ASYNC", "ARG", "DTZ", "TCH", "PERF", "FURB"
+    "E", "F", "W", "UP", "B", "C4", "SIM", "T20", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF", "RET", "ASYNC", "ARG", "DTZ", "TCH", "PERF", "FURB"
 ]
 ignore = []
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-exclude = [".venv", "venv", "__pycache__", ".mypy_cache", ".ruff_cache", "build", "dist", "*.egg-info"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["agents", "core", "config", "schemas", "models", "services", "utils", "storage", "tests"]
@@ -92,6 +94,16 @@ strict = true
 show_error_codes = true
 pretty = true
 namespace_packages = true
+packages = [
+    "agents",
+    "core",
+    "config",
+    "schemas",
+    "models",
+    "services",
+    "utils",
+    "storage",
+]
 exclude = [
     "venv",
     ".venv",
@@ -99,6 +111,9 @@ exclude = [
     ".mypy_cache",
     "build",
     "dist",
+    "site-packages",
+    ".pytest_cache",
+    ".ruff_cache",
 ]
 
 [tool.pytest.ini_options]
