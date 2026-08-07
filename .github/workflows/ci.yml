@@ -9,7 +9,7 @@ on:
 env:
   PYTHON_VERSION: "3.11"
   OLLAMA_BASE_URL: "http://localhost:11434"
-  OLLAMA_MODEL: "llama3.1"
+  OLLAMA_MODEL: "llama3.1:8b"
 
 jobs:
   lint-and-typecheck:
@@ -108,7 +108,7 @@ jobs:
             --name test-api \
             -p 8000:8000 \
             -e OLLAMA_BASE_URL=http://host.docker.internal:11434 \
-            -e OLLAMA_MODEL=llama3.1 \
+            -e OLLAMA_MODEL=llama3.1:8b \
             llm-trade-negotiation-agents:test
 
           # Wait for container to start
@@ -128,26 +128,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Start Ollama
+      - name: Start services with docker-compose
         run: |
-          docker run -d --name ollama -p 11434:11434 ollama/ollama:latest
-          # Wait for Ollama to be ready
+          docker compose up -d --build
+
+      - name: Wait for Ollama to be healthy
+        run: |
           for i in {1..30}; do
-            if curl -f http://localhost:11434/api/tags > /dev/null 2>&1; then
+            if docker compose exec ollama curl -f http://localhost:11434/api/tags > /dev/null 2>&1; then
               break
             fi
             sleep 2
           done
 
-      - name: Pull test model
+      - name: Pull test model in Ollama container
         run: |
-          docker exec ollama ollama pull llama3.1:8b
+          docker compose exec ollama ollama pull llama3.1:8b
 
-      - name: Start API with docker-compose
-        run: |
-          docker-compose up -d --build
-
-      - name: Wait for services
+      - name: Wait for API to be healthy
         run: |
           for i in {1..30}; do
             if curl -f http://localhost:8000/health > /dev/null 2>&1; then
@@ -160,17 +158,15 @@ jobs:
         run: |
           curl -X POST http://localhost:8000/negotiate \
             -H "Content-Type: application/json" \
-            -d '{"issue": "Test trade issue", "rounds": 1}' \
+            -d '{"issue": "Test trade issue", "rounds": 1, "model": "llama3.1:8b"}' \
             | jq .
 
       - name: Show logs on failure
         if: failure()
         run: |
-          docker-compose logs
+          docker compose logs
 
       - name: Cleanup
         if: always()
         run: |
-          docker-compose down -v
-          docker stop ollama
-          docker rm ollama
+          docker compose down -v

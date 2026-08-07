@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(
         default="http://localhost:11434", description="Ollama server base URL"
     )
-    ollama_model: str = Field(default="llama3.1", description="Ollama model name")
+    ollama_model: str = Field(default="llama3.1:8b", description="Ollama model name")
     ollama_timeout: float = Field(default=30.0, gt=0, description="Request timeout in seconds")
     ollama_max_retries: int = Field(default=3, ge=0, le=10, description="Max retry attempts")
     ollama_retry_base_delay: float = Field(
