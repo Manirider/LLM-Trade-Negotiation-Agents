@@ -132,22 +132,9 @@ jobs:
         run: |
           docker compose up -d --build
 
-      - name: Wait for Ollama to be healthy
-        run: |
-          for i in {1..30}; do
-            if docker compose exec ollama curl -f http://localhost:11434/api/tags > /dev/null 2>&1; then
-              break
-            fi
-            sleep 2
-          done
-
-      - name: Pull test model in Ollama container
-        run: |
-          docker compose exec ollama ollama pull llama3.1:8b
-
       - name: Wait for API to be healthy
         run: |
-          for i in {1..30}; do
+          for i in {1..60}; do
             if curl -f http://localhost:8000/health > /dev/null 2>&1; then
               break
             fi
