@@ -38,13 +38,15 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_MODEL=llama3.1:8b
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 120s
 
 volumes:
   ollama_data:

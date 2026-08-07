@@ -2,14 +2,13 @@ FROM ollama/ollama:latest
 
 ENV OLLAMA_KEEP_ALIVE=5m
 
-RUN ollama serve & \
-    sleep 10 && \
-    ollama pull llama3.1:8b && \
-    pkill ollama
+COPY pull-model.sh /usr/local/bin/pull-model.sh
+RUN chmod +x /usr/local/bin/pull-model.sh
 
 EXPOSE 11434
 
-HEALTHCHECK --interval=10s --timeout=10s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=10s --start-period=30s --retries=5 \
     CMD curl -f http://localhost:11434/api/tags || exit 1
 
+ENTRYPOINT ["/usr/local/bin/pull-model.sh"]
 CMD ["ollama", "serve"]
