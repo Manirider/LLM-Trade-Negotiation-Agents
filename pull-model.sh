@@ -1,7 +1,9 @@
 #!/bin/sh
 set -e
 
+# Allow overriding model via environment; default to llama3.1:8b for local, tiny for CI
 MODEL="${OLLAMA_MODEL:-llama3.1:8b}"
+CI_MODE="${CI:-false}"
 
 echo "Starting Ollama server..."
 ollama serve &
@@ -23,13 +25,20 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-echo "Checking if model '$MODEL' exists..."
-if ollama list | grep -q "^$MODEL "; then
-    echo "Model '$MODEL' already exists"
+# In CI mode, skip heavy model pull - use tiny model or rely on fallback
+if [ "$CI_MODE" = "true" ]; then
+    echo "CI mode: skipping heavy model pull (using fallback responses)"
+    # Optionally pull a tiny model if needed for integration tests
+    # ollama pull qwen2:0.5b  # ~400MB, fast
 else
-    echo "Pulling model '$MODEL'..."
-    ollama pull "$MODEL"
-    echo "Model '$MODEL' pulled successfully"
+    echo "Checking if model '$MODEL' exists..."
+    if ollama list | grep -q "^$MODEL "; then
+        echo "Model '$MODEL' already exists"
+    else
+        echo "Pulling model '$MODEL'..."
+        ollama pull "$MODEL"
+        echo "Model '$MODEL' pulled successfully"
+    fi
 fi
 
 echo "Stopping background server..."
