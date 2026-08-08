@@ -137,13 +137,13 @@ class OllamaService:
             response.raise_for_status()
             logger.info("model_pulled_successfully", model=model)
         except httpx.TimeoutException as e:
-            logger.error("model_pull_timeout", model=model, error=str(e))
+            logger.exception("model_pull_timeout", model=model, error=str(e))
             raise OllamaTimeoutError() from e
         except httpx.HTTPStatusError as e:
-            logger.error("model_pull_failed", model=model, status=e.response.status_code)
+            logger.exception("model_pull_failed", model=model, status=e.response.status_code)
             raise OllamaModelError(ERR_PULL_FAILED.format(model, e.response.status_code)) from e
         except Exception as e:
-            logger.error("model_pull_error", model=model, error=str(e))
+            logger.exception("model_pull_error", model=model, error=str(e))
             raise OllamaError(ERR_PULL_FAILED.format(model, str(e))) from e
 
     async def list_models(self) -> list[str]:

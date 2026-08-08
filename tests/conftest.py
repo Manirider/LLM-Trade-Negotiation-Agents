@@ -1,6 +1,6 @@
 import asyncio
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 # Set test environment variables BEFORE any imports
 os.environ.setdefault("OLLAMA_BASE_URL", "http://test:11434")
@@ -12,6 +12,7 @@ os.environ.setdefault("LOG_FILE", "/tmp/test_negotiation_log.json")
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from main import app
 
 from agents.factory import AgentFactory
 from config.settings import Settings
@@ -76,6 +77,5 @@ def clear_state():
 
 @pytest_asyncio.fixture
 async def async_client():
-    from main import app as test_app
-    async with AsyncClient(app=test_app, base_url="http://test") as client:
+    async with AsyncClient(app=app, base_url="http://test") as client:
         yield client
