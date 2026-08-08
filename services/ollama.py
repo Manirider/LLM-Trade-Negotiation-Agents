@@ -28,6 +28,7 @@ ERR_CLIENT_NOT_INIT: Final[str] = "Client not initialized"
 ERR_INVALID_JSON: Final[str] = "Invalid JSON response from Ollama"
 ERR_MODEL_NOT_FOUND: Final[str] = "Model '{0}' not found"
 ERR_SERVER_ERROR: Final[str] = "Ollama server error: {0}"
+ERR_PULL_FAILED: Final[str] = "Failed to pull model '{0}': {1}"
 
 
 class OllamaService:
@@ -87,10 +88,15 @@ class OllamaService:
             latency = time.perf_counter() - start
 
             if response.status_code == HTTP_NOT_FOUND:
-                raise OllamaModelError(ERR_MODEL_NOT_FOUND.format(self._model))
-            if response.status_code >= HTTP_SERVER_ERROR:
+                # Try to pull the model and retry once
+                logger.info("model_not_found_attempting_pull", model=self._model)
+                await self.pull_model(self._model)
+                response = await self._client.post("/api/generate", json=payload)
+                response.raise_for_status()
+            elif response.status_code >= HTTP_SERVER_ERROR:
                 raise OllamaError(ERR_SERVER_ERROR.format(response.status_code))
-            response.raise_for_status()
+            else:
+                response.raise_for_status()
 
             data = response.json()
             text = data.get("response", "").strip()
@@ -116,6 +122,50 @@ class OllamaService:
         except json.JSONDecodeError as e:
             logger.warning("ollama_invalid_json", error=str(e))
             raise OllamaError(ERR_INVALID_JSON) from e
+
+    async def pull_model(self, model: str) -> None:
+        """Pull a model from Ollama registry."""
+        if not self._client:
+            raise OllamaConnectionError(ERR_CLIENT_NOT_INIT)
+        try:
+            logger.info("pulling_model", model=model)
+            response = await self._client.post(
+                "/api/pull",
+                json={"model": model, "stream": False},
+                timeout=httpx.Timeout(300.0),  # 5 minutes for model pull
+            )
+            response.raise_for_status()
+            logger.info("model_pulled_successfully", model=model)
+        except httpx.TimeoutException as e:
+            logger.error("model_pull_timeout", model=model, error=str(e))
+            raise OllamaTimeoutError() from e
+        except httpx.HTTPStatusError as e:
+            logger.error("model_pull_failed", model=model, status=e.response.status_code)
+            raise OllamaModelError(ERR_PULL_FAILED.format(model, e.response.status_code)) from e
+        except Exception as e:
+            logger.error("model_pull_error", model=model, error=str(e))
+            raise OllamaError(ERR_PULL_FAILED.format(model, str(e))) from e
+
+    async def list_models(self) -> list[str]:
+        """List available models."""
+        if not self._client:
+            return []
+        try:
+            response = await self._client.get("/api/tags", timeout=10.0)
+            response.raise_for_status()
+            data = response.json()
+            return [m["name"] for m in data.get("models", [])]
+        except Exception:
+            return []
+
+    async def ensure_model(self, model: str | None = None) -> str:
+        """Ensure model is available, pull if missing. Returns the model name."""
+        target_model = model or self._model
+        models = await self.list_models()
+        if target_model not in models:
+            logger.info("model_missing_pulling", model=target_model)
+            await self.pull_model(target_model)
+        return target_model
 
     async def health_check(self) -> bool:
         if not self._client:

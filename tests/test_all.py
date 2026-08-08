@@ -205,7 +205,7 @@ class TestNegotiateEndpoint:
             ]
         )
 
-        with patch("main.orchestrator") as mock_orchestrator:
+        with patch("main.ollama_service", mock_ollama_service), patch("main.orchestrator") as mock_orchestrator:
             mock_orchestrator.run = AsyncMock(
                 return_value=MagicMock(
                     response=NegotiateResponse(
@@ -267,8 +267,8 @@ class TestNegotiateEndpoint:
         assert response.status_code == DEFAULT_STATUS_422
 
     @pytest.mark.asyncio
-    async def test_negotiate_invalid_payload_extra_fields(self, async_client):
-        with patch("main.orchestrator") as mock_orchestrator:
+    async def test_negotiate_invalid_payload_extra_fields(self, async_client, mock_ollama_service):
+        with patch("main.ollama_service", mock_ollama_service), patch("main.orchestrator") as mock_orchestrator:
             mock_orchestrator.run = AsyncMock(
                 return_value=MagicMock(
                     response=NegotiateResponse(
@@ -565,15 +565,15 @@ class TestAgentFactory:
 
 class TestErrorHandling:
     @pytest.mark.asyncio
-    async def test_ollama_timeout_returns_504(self, async_client):
-        with patch("main.orchestrator") as mock_orchestrator:
+    async def test_ollama_timeout_returns_504(self, async_client, mock_ollama_service):
+        with patch("main.ollama_service", mock_ollama_service), patch("main.orchestrator") as mock_orchestrator:
             mock_orchestrator.run = AsyncMock(side_effect=OllamaTimeoutError())
             response = await async_client.post("/negotiate", json={"issue": "test", "rounds": 1})
             assert response.status_code == DEFAULT_STATUS_504
 
     @pytest.mark.asyncio
-    async def test_ollama_connection_error_returns_503(self, async_client):
-        with patch("main.orchestrator") as mock_orchestrator:
+    async def test_ollama_connection_error_returns_503(self, async_client, mock_ollama_service):
+        with patch("main.ollama_service", mock_ollama_service), patch("main.orchestrator") as mock_orchestrator:
             mock_orchestrator.run = AsyncMock(side_effect=OllamaConnectionError())
             response = await async_client.post("/negotiate", json={"issue": "test", "rounds": 1})
             assert response.status_code == DEFAULT_STATUS_503
@@ -666,6 +666,7 @@ class TestOllamaService:
         mock_response = AsyncMock()
         mock_response.status_code = 404
         ollama_service._client.post = AsyncMock(return_value=mock_response)
+        ollama_service.pull_model = AsyncMock(side_effect=OllamaModelError("Pull failed"))
 
         with pytest.raises(OllamaModelError):
             await ollama_service.generate(

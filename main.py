@@ -171,6 +171,9 @@ async def negotiate(request: NegotiateRequest) -> NegotiateResponse:
     if request.model:
         ollama_service.set_model(model)
 
+    # Ensure model is available locally; pulls if missing
+    await ollama_service.ensure_model(model)
+
     result = await orchestrator.run(request, model)
     return result.response
 

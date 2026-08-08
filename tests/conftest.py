@@ -1,5 +1,6 @@
 import asyncio
 import os
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Set test environment variables BEFORE any imports
 os.environ.setdefault("OLLAMA_BASE_URL", "http://test:11434")
@@ -8,12 +9,9 @@ os.environ.setdefault("OLLAMA_TIMEOUT", "5.0")
 os.environ.setdefault("OLLAMA_MAX_RETRIES", "1")
 os.environ.setdefault("LOG_FILE", "/tmp/test_negotiation_log.json")
 
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from main import app
 
 from agents.factory import AgentFactory
 from config.settings import Settings
@@ -48,6 +46,8 @@ def mock_ollama_service():
     service.health_check = AsyncMock(return_value=True)
     service.get_model = MagicMock(return_value="test-model")
     service.set_model = MagicMock()
+    service.ensure_model = AsyncMock(return_value="test-model")
+    service.pull_model = AsyncMock()
     return service
 
 
@@ -76,5 +76,6 @@ def clear_state():
 
 @pytest_asyncio.fixture
 async def async_client():
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    from main import app as test_app
+    async with AsyncClient(app=test_app, base_url="http://test") as client:
         yield client

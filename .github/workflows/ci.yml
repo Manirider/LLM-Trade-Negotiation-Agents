@@ -10,6 +10,8 @@ env:
   PYTHON_VERSION: "3.11"
   OLLAMA_BASE_URL: "http://localhost:11434"
   OLLAMA_MODEL: "llama3.1:8b"
+  # Lightweight model for CI integration tests (~400MB vs 5GB)
+  OLLAMA_CI_MODEL: "qwen2:0.5b"
 
 jobs:
   lint-and-typecheck:
@@ -126,6 +128,8 @@ jobs:
     needs: [lint-and-typecheck, test]
     env:
       CI: "true"
+      # Use lightweight model for fast CI integration tests
+      OLLAMA_MODEL: ${{ env.OLLAMA_CI_MODEL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
