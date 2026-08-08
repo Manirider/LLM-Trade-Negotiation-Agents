@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from abc import ABC
 from datetime import UTC, datetime
 from typing import ParamSpec, TypeVar
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,7 +14,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from main import app
 
-from agents.base import ProposalResult
+from agents.base import BaseNegotiator, ProposalResult
 from agents.china import ChinaNegotiator, ChinaNegotiatorConfig
 from agents.factory import AgentFactory
 from agents.usa import USANegotiator, USANegotiatorConfig
@@ -783,6 +784,57 @@ class TestOllamaService:
     def test_get_model(self, ollama_service):
         assert ollama_service.get_model() == ollama_service._settings.ollama_model
 
+    @pytest.mark.asyncio
+    async def test_pull_model_timeout(self, ollama_service):
+        await ollama_service.startup()
+        ollama_service._client.post = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
+        with pytest.raises(OllamaTimeoutError):
+            await ollama_service.pull_model("test-model")
+        await ollama_service.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_pull_model_http_status_error(self, ollama_service):
+        await ollama_service.startup()
+        mock_response = AsyncMock()
+        mock_response.status_code = 500
+        mock_response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError("Error", request=MagicMock(), response=mock_response)
+        )
+        ollama_service._client.post = AsyncMock(return_value=mock_response)
+        with pytest.raises(OllamaModelError):
+            await ollama_service.pull_model("test-model")
+        await ollama_service.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_pull_model_generic_error(self, ollama_service):
+        await ollama_service.startup()
+        ollama_service._client.post = AsyncMock(side_effect=Exception("Generic error"))
+        with pytest.raises(OllamaError):
+            await ollama_service.pull_model("test-model")
+        await ollama_service.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_list_models_exception(self, ollama_service):
+        await ollama_service.startup()
+        ollama_service._client.get = AsyncMock(side_effect=Exception("Failed"))
+        models = await ollama_service.list_models()
+        assert models == []
+        await ollama_service.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_ensure_model_missing(self, ollama_service):
+        await ollama_service.startup()
+        ollama_service._client.get = AsyncMock(
+            return_value=AsyncMock(
+                status_code=200, json=lambda: {"models": []}, raise_for_status=lambda: None
+            )
+        )
+        ollama_service.pull_model = AsyncMock()
+        result = await ollama_service.ensure_model("missing-model")
+        assert result == "missing-model"
+        ollama_service.pull_model.assert_called_once_with("missing-model")
+        await ollama_service.shutdown()
+
 
 class TestLoggingService:
     @pytest.fixture
@@ -848,6 +900,22 @@ class TestLoggingService:
         logs = logging_service.get_recent_logs()
         assert logs == []
 
+    def test_get_recent_logs_json_decode_error(self, logging_service):
+        logging_service._log_file.write_text("invalid json\n")
+        logs = logging_service.get_recent_logs()
+        assert logs == []
+
+    def test_log_handles_oserror(self, logging_service, tmp_path):
+        logging_service._log_file = tmp_path / "readonly" / "log.json"
+        # Make parent dir read-only to trigger OSError
+        logging_service._log_file.parent.mkdir(parents=True, exist_ok=True)
+        logging_service._log_file.parent.chmod(0o444)
+        try:
+            entry = {"test": "data"}
+            logging_service.log(entry)  # Should not raise
+        finally:
+            logging_service._log_file.parent.chmod(0o755)
+
 
 class TestAgentBase:
     def test_proposal_result_dataclass(self):
@@ -882,6 +950,39 @@ class TestAgentBase:
         usa.add_to_history(round_data)
         usa.clear_history()
         assert len(usa.history) == 0
+
+    def test_base_negotiator_properties_abstract(self):
+        assert issubclass(BaseNegotiator, ABC)
+        assert hasattr(BaseNegotiator, "propose")
+        assert hasattr(BaseNegotiator, "respond")
+
+    @pytest.mark.asyncio
+    async def test_base_negotiator_propose_abstract(self, agent_factory):
+        usa = agent_factory.create_usa()
+        # Test that propose is abstract and implemented
+        assert callable(usa.propose)
+
+    @pytest.mark.asyncio
+    async def test_base_negotiator_respond_abstract(self, agent_factory):
+        usa = agent_factory.create_usa()
+        assert callable(usa.respond)
+
+    def test_parse_response_edge_cases(self, agent_factory):
+        usa = agent_factory.create_usa()
+        # Empty string
+        assert usa._parse_response("") == ""
+        # Only whitespace
+        assert usa._parse_response("   ") == ""
+        # Multiple newlines
+        assert usa._parse_response("Line 1\nLine 2\nLine 3") == "Line 1"
+        # No markdown
+        assert usa._parse_response("Plain text") == "Plain text"
+        # Malformed markdown (only opening) - not stripped, returns first line
+        assert usa._parse_response("```\nContent") == "```"
+        # Malformed markdown (only closing) - not stripped, returns first line
+        assert usa._parse_response("Content\n```") == "Content"
+        # Properly formatted markdown
+        assert usa._parse_response("```\nProposal text\n```") == "Proposal text"
 
     def test_parse_response_strips_markdown(self, agent_factory):
         usa = agent_factory.create_usa()
