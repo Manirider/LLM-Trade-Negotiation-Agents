@@ -128,8 +128,8 @@ jobs:
     needs: [lint-and-typecheck, test]
     env:
       CI: "true"
-      # Use lightweight model for fast CI integration tests
-      OLLAMA_MODEL: ${{ env.OLLAMA_CI_MODEL }}
+      # Use lightweight model for fast CI integration tests (~400MB vs 5GB)
+      OLLAMA_MODEL: "qwen2:0.5b"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
