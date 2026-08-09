@@ -2,10 +2,12 @@ FROM ollama/ollama:latest
 
 ENV OLLAMA_KEEP_ALIVE=5m
 
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 11434
 
-HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:11434/api/tags || exit 1
 
-ENTRYPOINT []
-CMD ["ollama", "serve"]
+ENTRYPOINT ["/entrypoint.sh"]
