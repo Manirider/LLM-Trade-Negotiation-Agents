@@ -7,4 +7,5 @@ EXPOSE 11434
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:11434/api/tags || exit 1
 
+ENTRYPOINT []
 CMD ["ollama", "serve"]
