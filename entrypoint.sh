@@ -22,6 +22,10 @@ for i in $(seq 1 30); do
         break
     fi
     sleep 2
+    if [ $i -eq 30 ]; then
+        echo "ERROR: Ollama API did not become ready after 60 seconds"
+        exit 1
+    fi
 done
 
 echo "Checking if model '$MODEL' exists..."
