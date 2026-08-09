@@ -2,6 +2,10 @@ FROM ollama/ollama:latest
 
 ENV OLLAMA_KEEP_ALIVE=5m
 
+# Install curl for healthcheck and entrypoint readiness probe
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
