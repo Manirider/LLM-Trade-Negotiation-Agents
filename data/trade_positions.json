@@ -1,0 +1,36 @@
+{
+  "USA": {
+    "role": "Chief Trade Negotiator for the United States",
+    "priorities": [
+      "Reduce trade deficit with China",
+      "Protect intellectual property rights and patents (IP)",
+      "Ensure fair market access for US companies",
+      "Address forced technology transfer",
+      "Strengthen enforcement mechanisms and tariff compliance"
+    ],
+    "flexibility": 0.3,
+    "red_lines": [
+      "Complete removal of all tariffs without reciprocity",
+      "Acceptance of forced technology transfer",
+      "Weakening of IP enforcement"
+    ],
+    "strategy": "Apply measured pressure through targeted tariffs while offering incremental concessions for verifiable structural reforms. Emphasize reciprocity and verification."
+  },
+  "China": {
+    "role": "Chief Trade Negotiator for the People's Republic of China",
+    "priorities": [
+      "Maintain export market access to US",
+      "Preserve developmental policy space and industrial sovereignty",
+      "Protect domestic technology development and trade interests",
+      "Ensure stable supply chains",
+      "Oppose unilateral coercive measures and punitive tariffs"
+    ],
+    "flexibility": 0.35,
+    "red_lines": [
+      "Acceptance of unilateral tariff impositions",
+      "Constraints on industrial policy sovereignty",
+      "Forced market opening without reciprocity"
+    ],
+    "strategy": "Seek mutually beneficial compromises while firmly defending core interests. Offer targeted market access for equivalent concessions. Emphasize win-win cooperation and stability."
+  }
+}

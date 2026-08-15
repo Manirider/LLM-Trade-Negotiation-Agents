@@ -6,10 +6,11 @@ from typing import TYPE_CHECKING
 
 from agents.base import BaseNegotiator, ProposalResult
 from core.prompts import USA_PROPOSE_PROMPT, USA_RESPOND_PROMPT
-from models.negotiator import USA_PERSONA, NegotiatorModel
+from models.negotiator import NegotiatorModel, get_usa_persona
 
 if TYPE_CHECKING:
     from models.issue import TradeIssueModel
+    from schemas.negotiation import NegotiatorPersona
     from services.ollama import OllamaService
 
 
@@ -18,6 +19,7 @@ class USANegotiatorConfig:
     temperature: float = 0.1
     top_p: float = 0.9
     max_tokens: int = 150
+    persona: NegotiatorPersona | None = None
 
 
 class USANegotiator(BaseNegotiator):
@@ -27,9 +29,10 @@ class USANegotiator(BaseNegotiator):
         config: USANegotiatorConfig | None = None,
     ):
         cfg = config or USANegotiatorConfig()
-        system_prompt = self._build_system_prompt_static()
+        persona = cfg.persona or get_usa_persona()
+        system_prompt = self._build_system_prompt(persona)
         model = NegotiatorModel(
-            persona=USA_PERSONA,
+            persona=persona,
             system_prompt=system_prompt,
             temperature=cfg.temperature,
             top_p=cfg.top_p,
@@ -38,8 +41,8 @@ class USANegotiator(BaseNegotiator):
         super().__init__(model, ollama_service)
 
     @staticmethod
-    def _build_system_prompt_static() -> str:
-        p = USA_PERSONA
+    def _build_system_prompt(persona: NegotiatorPersona | None = None) -> str:
+        p = persona or get_usa_persona()
         return (
             f"You are {p.role}. "
             f"Your priorities: {', '.join(p.priorities)}. "
@@ -52,7 +55,13 @@ class USANegotiator(BaseNegotiator):
             "Be direct and concise."
         )
 
-    async def propose(self, issue: TradeIssueModel, round_num: int) -> ProposalResult:
+    @staticmethod
+    def _build_system_prompt_static() -> str:
+        return USANegotiator._build_system_prompt()
+
+    async def propose(
+        self, issue: TradeIssueModel, round_num: int, model: str | None = None
+    ) -> ProposalResult:
         prompt = USA_PROPOSE_PROMPT.format(
             issue_context=issue.to_prompt_context(),
             round_num=round_num,
@@ -68,13 +77,18 @@ class USANegotiator(BaseNegotiator):
             temperature=self._model.temperature,
             top_p=self._model.top_p,
             max_tokens=self._model.max_tokens,
+            model=model,
         )
         latency = int((time.perf_counter() - start) * 1000)
         text = self._parse_response(raw)
         return ProposalResult(text=text, tokens=tokens, latency_ms=latency)
 
     async def respond(
-        self, issue: TradeIssueModel, opponent_proposal: str, round_num: int
+        self,
+        issue: TradeIssueModel,
+        opponent_proposal: str,
+        round_num: int,
+        model: str | None = None,
     ) -> ProposalResult:
         prompt = USA_RESPOND_PROMPT.format(
             issue_context=issue.to_prompt_context(),
@@ -92,6 +106,7 @@ class USANegotiator(BaseNegotiator):
             temperature=self._model.temperature,
             top_p=self._model.top_p,
             max_tokens=self._model.max_tokens,
+            model=model,
         )
         latency = int((time.perf_counter() - start) * 1000)
         text = self._parse_response(raw)

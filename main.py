@@ -120,7 +120,7 @@ async def ollama_model_handler(_request: Request, exc: OllamaModelError) -> JSON
 @app.exception_handler(AppValidationError)
 async def validation_error_handler(_request: Request, exc: AppValidationError) -> JSONResponse:
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=ErrorResponse(
             error="VALIDATION_ERROR",
             message=exc.message,
@@ -135,7 +135,7 @@ async def pydantic_validation_handler(
 ) -> JSONResponse:
     errors = [{"field": e["loc"][-1], "message": e["msg"]} for e in exc.errors()]
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=ErrorResponse(
             error="VALIDATION_ERROR",
             message="Request validation failed",
@@ -150,7 +150,7 @@ async def pydantic_model_validation_handler(
 ) -> JSONResponse:
     errors = [{"field": e["loc"][-1], "message": e["msg"]} for e in exc.errors()]
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=ErrorResponse(
             error="VALIDATION_ERROR",
             message="Data validation failed",
@@ -168,8 +168,6 @@ async def health_check() -> HealthResponse:
 @app.post("/negotiate", response_model=NegotiateResponse)
 async def negotiate(request: NegotiateRequest) -> NegotiateResponse:
     model = request.model or settings.ollama_model
-    if request.model:
-        ollama_service.set_model(model)
 
     # Ensure model is available locally; pulls if missing
     await ollama_service.ensure_model(model)

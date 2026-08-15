@@ -47,12 +47,18 @@ class BaseNegotiator(ABC):
         self._history.clear()
 
     @abstractmethod
-    async def propose(self, issue: TradeIssueModel, round_num: int) -> ProposalResult:
+    async def propose(
+        self, issue: TradeIssueModel, round_num: int, model: str | None = None
+    ) -> ProposalResult:
         pass
 
     @abstractmethod
     async def respond(
-        self, issue: TradeIssueModel, opponent_proposal: str, round_num: int
+        self,
+        issue: TradeIssueModel,
+        opponent_proposal: str,
+        round_num: int,
+        model: str | None = None,
     ) -> ProposalResult:
         pass
 
@@ -64,5 +70,5 @@ class BaseNegotiator(ABC):
         if cleaned.startswith("```") and cleaned.endswith("```"):
             lines = cleaned.split("\n")
             if len(lines) >= MARKDOWN_FENCE_LINES:  # Opening fence, content, closing fence
-                cleaned = "\n".join(lines[1:-1])
+                cleaned = "\n".join(lines[1:-1]).strip()
         return cleaned.split("\n")[0].strip() if "\n" in cleaned else cleaned

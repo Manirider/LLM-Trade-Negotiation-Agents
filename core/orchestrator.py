@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from core.state import STATE_MANAGER, NegotiationState
 from models.history import HistoryRoundModel
 from models.issue import TradeIssueModel
-from schemas.response import HistoryRound, NegotiateResponse
+from schemas.response import HistoryRound, NegotiateResponse, OutcomeModel
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,8 +39,8 @@ class NegotiationOrchestrator:
         china.clear_history()
         try:
             for r in range(1, request.rounds + 1):
-                usa_prop = await usa.propose(issue, r)
-                china_resp = await china.respond(issue, usa_prop.text, r)
+                usa_prop = await usa.propose(issue, r, model=model)
+                china_resp = await china.respond(issue, usa_prop.text, r, model=model)
                 rd = HistoryRoundModel.create(
                     r,
                     usa_prop.text,
@@ -92,15 +92,31 @@ class NegotiationOrchestrator:
             )
             for h in state.history
         ]
+        score_val = state.final_score if state.final_score is not None else 0.0
+        summary_val = self._scorer._generate_summary(score_val, state.agreement_reached)
+        if hist:
+            last_usa = hist[-1].usa_proposal
+            last_china = hist[-1].china_response
+            final_terms_val = self._scorer._generate_final_terms(
+                last_usa, last_china, score_val, state.agreement_reached
+            )
+        else:
+            final_terms_val = "No rounds completed."
+
+        outcome = OutcomeModel(
+            agreement_reached=state.agreement_reached,
+            final_terms=final_terms_val,
+            compromise_score=score_val,
+        )
+
         return NegotiateResponse(
             issue=request.issue,
-            rounds=state.current_round,
+            rounds=hist,
+            outcome=outcome,
             history=hist,
             agreement_reached=state.agreement_reached,
-            score=state.final_score or 0.0,
-            summary=self._scorer._generate_summary(
-                state.final_score or 0.0, state.agreement_reached
-            ),
+            score=score_val,
+            summary=summary_val,
             execution_time_ms=exec_ms,
             model=model,
         )

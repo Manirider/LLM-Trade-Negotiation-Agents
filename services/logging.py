@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 import structlog
 
 from config.settings import get_settings
+from storage.file_storage import FileStorage
 from utils.validation import sanitize_for_log
 
 
@@ -24,11 +26,16 @@ def _serialize_for_json(obj: Any) -> Any:
 
 
 class LoggingService:
-    def __init__(self, log_file: str | None = None):
+    def __init__(
+        self,
+        log_file: str | None = None,
+        file_storage: FileStorage | None = None,
+    ):
         settings = get_settings()
         self._log_file = Path(log_file or settings.log_file)
         self._log_file.parent.mkdir(parents=True, exist_ok=True)
         self._logger = structlog.get_logger("negotiation")
+        self._file_storage = file_storage or FileStorage(self._log_file.parent / "negotiations")
 
     def log(self, entry: dict[str, Any]) -> None:
         sanitized = sanitize_for_log(entry)
@@ -42,6 +49,13 @@ class LoggingService:
                 f.write(json.dumps(sanitized, ensure_ascii=False) + "\n")
         except OSError as e:
             self._logger.exception("log_write_failed", error=str(e), path=str(self._log_file))
+
+        # Persist structured snapshot to file storage
+        try:
+            rec_id = sanitized.get("negotiation_id") or str(uuid.uuid4())[:8]
+            self._file_storage.save_negotiation(rec_id, sanitized)
+        except Exception:
+            pass
 
     def log_error(self, error: Exception, context: dict[str, Any] | None = None) -> None:
         entry = {

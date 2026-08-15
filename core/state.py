@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from models.issue import TradeIssueModel
 
 from schemas.negotiation import HistoryRound, LogEntry
+from storage.memory_storage import MemoryStorage
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,8 +74,10 @@ class NegotiationState:
 
 
 class StateManager:
-    def __init__(self) -> None:
-        self._states: dict[str, NegotiationState] = {}
+    def __init__(self, storage: MemoryStorage | None = None) -> None:
+        self._storage: MemoryStorage = (
+            storage if storage is not None else MemoryStorage(max_size=1000)
+        )
 
     def create_state(
         self,
@@ -84,21 +87,21 @@ class StateManager:
         model: str,
     ) -> NegotiationState:
         state = NegotiationState(issue=issue, rounds=rounds, model=model)
-        self._states[negotiation_id] = state
+        self._storage.set(negotiation_id, state)
         return state
 
     def get_state(self, negotiation_id: str) -> NegotiationState | None:
-        return self._states.get(negotiation_id)
+        return self._storage.get(negotiation_id)
 
     def update_state(self, negotiation_id: str, state: NegotiationState) -> NegotiationState:
-        self._states[negotiation_id] = state
+        self._storage.set(negotiation_id, state)
         return state
 
     def delete_state(self, negotiation_id: str) -> None:
-        self._states.pop(negotiation_id, None)
+        self._storage.delete(negotiation_id)
 
     def clear(self) -> None:
-        self._states.clear()
+        self._storage.clear()
 
 
 STATE_MANAGER: Final[StateManager] = StateManager()

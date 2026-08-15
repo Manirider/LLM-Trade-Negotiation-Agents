@@ -57,19 +57,21 @@ class OllamaService:
             logger.info("ollama_client_closed")
 
     @ollama_retry()
-    async def generate(
+    async def generate(  # noqa: PLR0913, PLR0917
         self,
         prompt: str,
         system: str,
         temperature: float,
         top_p: float,
         max_tokens: int,
+        model: str | None = None,
     ) -> tuple[str, int | None]:
         if not self._client:
             raise OllamaConnectionError(ERR_CLIENT_NOT_INIT)
 
+        target_model = model or self._model
         payload = {
-            "model": self._model,
+            "model": target_model,
             "prompt": sanitize_input(prompt),
             "system": sanitize_input(system),
             "temperature": temperature,
@@ -89,8 +91,8 @@ class OllamaService:
 
             if response.status_code == HTTP_NOT_FOUND:
                 # Try to pull the model and retry once
-                logger.info("model_not_found_attempting_pull", model=self._model)
-                await self.pull_model(self._model)
+                logger.info("model_not_found_attempting_pull", model=target_model)
+                await self.pull_model(target_model)
                 response = await self._client.post("/api/generate", json=payload)
                 response.raise_for_status()
             elif response.status_code >= HTTP_SERVER_ERROR:

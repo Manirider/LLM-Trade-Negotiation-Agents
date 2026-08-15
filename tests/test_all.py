@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from abc import ABC
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import ParamSpec, TypeVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -30,7 +31,14 @@ from core.scoring import ScoringEngine
 from core.state import STATE_MANAGER
 from models.history import HistoryRoundModel
 from models.issue import TradeIssueModel
-from models.negotiator import CHINA_PERSONA, USA_PERSONA, NegotiatorModel
+from models.negotiator import (
+    CHINA_PERSONA,
+    USA_PERSONA,
+    NegotiatorModel,
+    get_china_persona,
+    get_usa_persona,
+    load_trade_positions,
+)
 from schemas.negotiation import (
     Country,
     HistoryRound,
@@ -40,7 +48,7 @@ from schemas.negotiation import (
     TradeIssue,
 )
 from schemas.request import HealthResponse, NegotiateRequest
-from schemas.response import ErrorResponse, NegotiateResponse
+from schemas.response import ErrorResponse, NegotiateResponse, OutcomeModel
 from services.logging import LoggingService
 from services.ollama import DEFAULT_FALLBACK, OllamaService
 from storage.file_storage import FileStorage
@@ -206,6 +214,38 @@ class TestNegotiateEndpoint:
             ]
         )
 
+        hist_rounds = [
+            HistoryRound(
+                round=1,
+                timestamp=datetime.now(UTC),
+                usa_proposal="USA proposes tariff reduction and intellectual property protections",
+                china_response="China accepts with conditions on market access",
+                tokens=DEFAULT_TOKENS_10,
+                latency_ms=DEFAULT_LATENCY_100,
+            ),
+            HistoryRound(
+                round=2,
+                timestamp=datetime.now(UTC),
+                usa_proposal="USA proposes intellectual property enforcement and tariff cuts",
+                china_response="China agrees to strengthen enforcement and trade access",
+                tokens=DEFAULT_TOKENS_15,
+                latency_ms=DEFAULT_LATENCY_150,
+            ),
+            HistoryRound(
+                round=3,
+                timestamp=datetime.now(UTC),
+                usa_proposal="USA proposes final market access and ip verification",
+                china_response="China offers reciprocal market access and tariff relief",
+                tokens=DEFAULT_TOKENS_20,
+                latency_ms=DEFAULT_LATENCY_100,
+            ),
+        ]
+        outcome_obj = OutcomeModel(
+            agreement_reached=True,
+            final_terms="USA and China agree to reciprocal tariff reduction and IP enforcement.",
+            compromise_score=DEFAULT_SCORE_075,
+        )
+
         with (
             patch("main.ollama_service", mock_ollama_service),
             patch("main.orchestrator") as mock_orchestrator,
@@ -214,8 +254,9 @@ class TestNegotiateEndpoint:
                 return_value=MagicMock(
                     response=NegotiateResponse(
                         issue="tariffs",
-                        rounds=DEFAULT_ROUNDS,
-                        history=[],
+                        rounds=hist_rounds,
+                        outcome=outcome_obj,
+                        history=hist_rounds,
                         agreement_reached=True,
                         score=DEFAULT_SCORE_075,
                         summary="Agreement reached",
@@ -237,9 +278,48 @@ class TestNegotiateEndpoint:
             assert response.status_code == DEFAULT_STATUS_200
             data = response.json()
             assert data["issue"] == "tariffs"
-            assert data["rounds"] == DEFAULT_ROUNDS
+            assert len(data["rounds"]) == DEFAULT_ROUNDS
+            assert len(data["history"]) == DEFAULT_ROUNDS
+            assert data["outcome"]["agreement_reached"] is True
+            assert 0.0 <= data["outcome"]["compromise_score"] <= 1.0
+            assert "final_terms" in data["outcome"]
             assert data["agreement_reached"] is True
             assert 0.0 <= data["score"] <= 1.0
+
+    @pytest.mark.asyncio
+    async def test_negotiate_proposals_reference_trade_positions(
+        self, async_client, mock_ollama_service
+    ):
+        mock_ollama_service.generate = AsyncMock(
+            side_effect=[
+                ("USA demands IP protection and tariff concessions.", 10),
+                ("China seeks fair market access and opposes unilateral tariffs.", 12),
+                ("USA offers tariff relief for verifiable IP enforcement.", 15),
+                ("China agrees to IP protection and guarantees expanded market access.", 14),
+            ]
+        )
+        with (
+            patch("main.ollama_service.ensure_model", AsyncMock(return_value="test-model")),
+            patch("main.agent_factory._ollama.generate", mock_ollama_service.generate),
+            patch("main.ollama_service.generate", mock_ollama_service.generate),
+        ):
+            response = await async_client.post(
+                "/negotiate",
+                json={
+                    "issue": "bilateral trade and ip rights",
+                    "rounds": DEFAULT_TEST_ROUNDS,
+                },
+            )
+            assert response.status_code == DEFAULT_STATUS_200
+            data = response.json()
+            assert len(data["rounds"]) == DEFAULT_TEST_ROUNDS
+
+            proposals_combined = " ".join(
+                f"{r['usa_proposal']} {r['china_response']}" for r in data["rounds"]
+            ).lower()
+
+            assert any(kw in proposals_combined for kw in ["ip", "intellectual property"])
+            assert any(kw in proposals_combined for kw in ["market access", "tariff"])
 
     @pytest.mark.asyncio
     async def test_negotiate_invalid_payload_missing_issue(self, async_client):
@@ -456,7 +536,7 @@ class TestNegotiationOrchestrator:
 
             result = await orchestrator.run(request, "test-model")
 
-            assert result.response.rounds == DEFAULT_TEST_ROUNDS
+            assert len(result.response.rounds) == DEFAULT_TEST_ROUNDS
             assert len(result.response.history) == DEFAULT_TEST_ROUNDS
 
     @pytest.mark.asyncio
@@ -489,7 +569,7 @@ class TestNegotiationOrchestrator:
 
             result = await orchestrator.run(request, "test-model")
 
-            assert result.response.rounds <= DEFAULT_MAX_ROUNDS
+            assert len(result.response.rounds) <= DEFAULT_MAX_ROUNDS
             assert len(result.response.history) <= DEFAULT_MAX_ROUNDS
 
     @pytest.mark.asyncio
@@ -520,7 +600,7 @@ class TestNegotiationOrchestrator:
         )
 
         assert response.issue == "test issue"
-        assert response.rounds == 1
+        assert len(response.rounds) == 1
         assert len(response.history) == 1
         assert response.agreement_reached is True
         assert response.score == DEFAULT_SCORE_08
@@ -607,6 +687,45 @@ class TestResponseSchema:
         assert response.score == DEFAULT_SCORE_075
         assert response.agreement_reached is True
         assert 0.0 <= response.score <= 1.0
+        assert response.outcome.agreement_reached is True
+        assert response.outcome.compromise_score == DEFAULT_SCORE_075
+
+    def test_negotiate_response_normalize_dict_outcome(self):
+        hist = [
+            HistoryRound(
+                round=1,
+                timestamp=datetime.now(UTC),
+                usa_proposal="USA",
+                china_response="China",
+                latency_ms=DEFAULT_LATENCY_100,
+            )
+        ]
+        resp = NegotiateResponse(
+            issue="test",
+            rounds=hist,
+            outcome={"agreement_reached": True, "final_terms": "agreed", "compromise_score": 0.9},
+        )
+        assert resp.outcome.agreement_reached is True
+        assert resp.score == 0.9  # noqa: PLR2004
+        assert resp.agreement_reached is True
+        assert len(resp.rounds) == 1
+        assert len(resp.history) == 1
+
+    def test_negotiate_response_normalize_int_rounds_no_history(self):
+        resp = NegotiateResponse(
+            issue="test",
+            rounds=DEFAULT_TEST_ROUNDS,
+            outcome={
+                "agreement_reached": False,
+                "final_terms": "none",
+                "compromise_score": 0.2,
+            },
+        )
+        assert resp.rounds == []
+        assert resp.history == []
+
+    def test_negotiate_response_normalize_non_dict(self):
+        assert NegotiateResponse.normalize_response("string") == "string"
 
 
 class TestOllamaService:
@@ -907,7 +1026,6 @@ class TestLoggingService:
 
     def test_log_handles_oserror(self, logging_service, tmp_path):
         logging_service._log_file = tmp_path / "readonly" / "log.json"
-        # Make parent dir read-only to trigger OSError
         logging_service._log_file.parent.mkdir(parents=True, exist_ok=True)
         logging_service._log_file.parent.chmod(0o444)
         try:
@@ -915,6 +1033,25 @@ class TestLoggingService:
             logging_service.log(entry)  # Should not raise
         finally:
             logging_service._log_file.parent.chmod(0o755)
+
+    def test_log_serializes_pydantic_model(self, logging_service):
+        req = NegotiateRequest(issue="model_dump_test", rounds=1)
+        entry = {"request": req}
+        logging_service.log(entry)
+        content = logging_service._log_file.read_text()
+        assert "model_dump_test" in content
+
+    def test_log_error_handles_oserror(self, logging_service):
+        with patch.object(Path, "open", side_effect=OSError("Disk full")):
+            logging_service.log_error(ValueError("Test error"))
+
+    def test_log_file_storage_error(self, logging_service):
+        with patch.object(
+            logging_service._file_storage,
+            "save_negotiation",
+            side_effect=Exception("Storage error"),
+        ):
+            logging_service.log({"test": "data"})
 
 
 class TestAgentBase:
@@ -1181,6 +1318,29 @@ class TestNegotiatorPersona:
         assert CHINA_PERSONA.flexibility == DEFAULT_FLEXIBILITY_CHINA
         assert len(CHINA_PERSONA.red_lines) == DEFAULT_RED_LINES
         assert "win-win" in CHINA_PERSONA.strategy.lower()
+
+    def test_load_trade_positions_from_json(self):
+        positions = load_trade_positions()
+        assert Country.USA in positions
+        assert Country.CHINA in positions
+        assert len(positions[Country.USA].priorities) >= DEFAULT_RED_LINES
+        assert len(positions[Country.CHINA].priorities) >= DEFAULT_RED_LINES
+        has_ip = any(
+            "ip" in p.lower() or "intellectual property" in p.lower()
+            for p in positions[Country.USA].priorities
+        )
+        assert has_ip
+
+    def test_load_trade_positions_fallback(self):
+        positions = load_trade_positions("non_existent_file.json")
+        assert positions[Country.USA].country == Country.USA
+        assert positions[Country.CHINA].country == Country.CHINA
+
+    def test_get_usa_and_china_persona(self):
+        usa = get_usa_persona()
+        china = get_china_persona()
+        assert usa.country == Country.USA
+        assert china.country == Country.CHINA
 
 
 class TestSchemasRequest:
