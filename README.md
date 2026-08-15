@@ -7,7 +7,7 @@
 [![Coverage](https://img.shields.io/badge/Coverage->95%25-brightgreen.svg)](https://github.com/Manirider/LLM-Trade-Negotiation-Agents/actions)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://github.com/Manirider/LLM-Trade-Negotiation-Agents/pkgs/container/llm-trade-negotiation-agents)
 [![Code Style](https://img.shields.io/badge/Code%20Style-Black-000000.svg)](https://github.com/psf/black)
-[![Type Checking](https://img.shields.io/badge/Type%20Checking-mypy%20strict-blue.svg)](https://github.com/microsoft/pyright)
+[![Type Checking](https://img.shields.io/badge/Type%20Checking-mypy%20strict-blue.svg)](https://github.com/python/mypy)
 
 A production-grade FastAPI service simulating trade negotiations between USA and China agents using LLMs via Ollama. Built with Clean Architecture, comprehensive testing (>95% coverage), and FAANG-level engineering standards.
 
