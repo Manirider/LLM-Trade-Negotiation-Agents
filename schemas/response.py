@@ -4,7 +4,7 @@ from typing import Any, Final
 
 from pydantic import BaseModel, Field, model_validator
 
-from schemas.negotiation import HistoryRound  # noqa: TC001
+from schemas.negotiation import HistoryRound as HistoryRound  # noqa: PLC0414, TC001
 
 ERR_INVALID_SCORE: Final[str] = "score must be between 0.0 and 1.0"
 
