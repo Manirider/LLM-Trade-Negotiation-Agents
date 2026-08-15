@@ -106,21 +106,29 @@ jobs:
 
       - name: Test Docker image
         run: |
-          docker run --rm -d \
+          docker run -d \
             --name test-api \
             -p 8000:8000 \
-            -e OLLAMA_BASE_URL=http://host.docker.internal:11434 \
+            -e OLLAMA_BASE_URL=http://localhost:11434 \
             -e OLLAMA_MODEL=llama3.1:8b \
             llm-trade-negotiation-agents:test
 
           # Wait for container to start
-          sleep 10
+          for i in {1..30}; do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "API container is healthy!"
+              break
+            fi
+            echo "Waiting for API to start (attempt $i/30)..."
+            sleep 2
+          done
 
           # Test health endpoint
           curl -f http://localhost:8000/health || (docker logs test-api && exit 1)
 
           # Cleanup
           docker stop test-api
+          docker rm test-api
 
   docker-compose:
     name: Docker Compose Integration Test
