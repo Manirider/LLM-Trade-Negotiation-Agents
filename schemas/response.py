@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Final
 
 from pydantic import BaseModel, Field, model_validator
+
 from schemas.negotiation import HistoryRound  # noqa: TC001
 
 ERR_INVALID_SCORE: Final[str] = "score must be between 0.0 and 1.0"
